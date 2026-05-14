@@ -1,0 +1,26 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "backups",
+    "data",
+    "logs",
+    "src/temp_file.py",
+    "src/program_secrets copy.py"
+  ],
+  "extraPaths": [
+    ".",
+    "src"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false
+}

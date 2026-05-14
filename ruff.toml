@@ -1,0 +1,4 @@
+exclude = [
+    "backups",
+    "src/temp_file.py",
+]

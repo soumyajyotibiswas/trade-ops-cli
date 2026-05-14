@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+httpx = "==0.28.1"
+loguru = "==0.7.2"
+neo-api-client = {git = "https://github.com/Kotak-Neo/Kotak-neo-api-v2.git", ref = "1533903cb5db1a50892223b404d753dbc8fba50e"}
+pandas = "==2.2.3"
+py5paisa = "==0.7.12"
+python-dotenv = "==1.0.0"
+requests = "==2.32.3"
+tabulate = "==0.9.0"
+
+[dev-packages]
+pylint = "==3.1.0"
+ruff = "==0.15.10"
+
+[requires]
+python_version = "3.11"
+python_full_version = "3.11.15"
