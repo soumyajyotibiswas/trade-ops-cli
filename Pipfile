@@ -4,14 +4,25 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+asyncio = "==3.4.3"
+bidict = "==0.22.1"
+certifi = "==2024.7.4"
 httpx = "==0.28.1"
+idna = "==3.7"
 loguru = "==0.7.2"
-neo-api-client = {git = "https://github.com/Kotak-Neo/Kotak-neo-api-v2.git", ref = "1533903cb5db1a50892223b404d753dbc8fba50e"}
+numpy = "==2.1.0"
 pandas = "==2.2.3"
 py5paisa = "==0.7.12"
-python-dotenv = "==1.0.0"
-requests = "==2.32.3"
+pyjsparser = "==2.7.1"
+pyjwt = "==2.12.0"
+python-dateutil = "==2.8.2"
+python-dotenv = "==1.2.2"
+requests = "==2.33.0"
+six = "==1.16.0"
 tabulate = "==0.9.0"
+urllib3 = "==2.7.0"
+websocket-client = "==1.8.0"
+websockets = "==9.1"
 
 [dev-packages]
 pylint = "==3.1.0"

@@ -25,8 +25,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
-from neo_api_client import NeoAPI
-from py5paisa import FivePaisaClient
+
+NeoAPI: Any | None = None
+FivePaisaClient: Any | None = None
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
@@ -112,6 +113,40 @@ def _is_ssl_verification_error(exc: Exception) -> bool:
     """Return True when an exception message looks like certificate failure."""
     msg = str(exc)
     return "SSLError" in msg or "CERTIFICATE_VERIFY_FAILED" in msg
+
+
+def _get_fivepaisa_client_class() -> Any:
+    """Return the py5paisa client class, importing the optional SDK lazily."""
+    global FivePaisaClient
+    if FivePaisaClient is not None:
+        return FivePaisaClient
+    try:
+        from py5paisa import FivePaisaClient as imported_client
+    except ImportError as exc:
+        raise RuntimeError(
+            "py5paisa is required for 5paisa login. Run `pipenv install` "
+            "from this repository to install the supported dependency set."
+        ) from exc
+    FivePaisaClient = imported_client
+    return FivePaisaClient
+
+
+def _get_neo_api_class() -> Any:
+    """Return Kotak NeoAPI, importing the optional SDK only for Kotak login."""
+    global NeoAPI
+    if NeoAPI is not None:
+        return NeoAPI
+    try:
+        from neo_api_client import NeoAPI as imported_client
+    except ImportError as exc:
+        raise RuntimeError(
+            "neo-api-client is required for Kotak Neo login. Install the SDK "
+            "code with `pipenv run python -m pip install --no-deps "
+            "git+https://github.com/Kotak-Neo/Kotak-neo-api-v2.git@"
+            "1533903cb5db1a50892223b404d753dbc8fba50e#egg=neo-api-client`."
+        ) from exc
+    NeoAPI = imported_client
+    return NeoAPI
 
 
 class Login:
@@ -214,7 +249,7 @@ class Login:
             log.info(
                 "[5paisa] Initializing FivePaisaClient for '%s'.", self.account_name
             )
-            client = FivePaisaClient(cred=self.cred_5paisa)
+            client = _get_fivepaisa_client_class()(cred=self.cred_5paisa)
             max_retries = 2
             while max_retries > 0:
                 log.debug(
@@ -265,7 +300,7 @@ class Login:
                 print(
                     f"environment: {self.environment}, consumer_key: {self.cred_kotak['CONSUMER_KEY']}, client_mobile: {mask_mobile_number(self.cred_kotak['CLIENT_MOBILE_NUMBER'])}, ucc: {self.cred_kotak['CLIENT_UCC']}, mpin: {'*' * len(self.cred_kotak['CLIENT_MPIN'])}"
                 )
-                client = NeoAPI(
+                client = _get_neo_api_class()(
                     environment=self.environment,
                     access_token=None,
                     neo_fin_key=None,

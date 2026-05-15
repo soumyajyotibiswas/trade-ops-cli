@@ -75,11 +75,19 @@ For development and portfolio review, the unit tests do not require live broker 
 
 ## Quick Start
 
-Install dependencies:
+Install the locked safe dependency set:
 
 ```bash
 pipenv install
 ```
+
+For live Kotak Neo trading, install Kotak's SDK code without its pinned dependencies:
+
+```bash
+pipenv run python -m pip install --no-deps "git+https://github.com/Kotak-Neo/Kotak-neo-api-v2.git@1533903cb5db1a50892223b404d753dbc8fba50e#egg=neo-api-client"
+```
+
+Why the extra command? The upstream Kotak SDK currently pins older transitive packages exactly. This project keeps patched versions of `requests`, `urllib3`, `certifi`, `idna`, `PyJWT`, `python-dotenv`, and `websockets` in the lockfile, then loads the Kotak SDK lazily only when a Kotak login is attempted. Unit tests and quote-only development do not need the Kotak SDK installed.
 
 Create your local secrets file from the redacted template:
 
@@ -547,6 +555,7 @@ backups/pre_engine_refactor_2026-05-14_1009/
 | JSON reads | Invalid JSON returns `None`. | A partial/stale file no longer crashes the reader path. |
 | Background threads | Threads are named and uncaught target errors are logged. | Easier debugging when a background worker dies. |
 | SSL/CA setup | Added CA bundle detection and broker-specific override env vars. | Helps with self-signed/corporate/VPN certificate chains. |
+| Dependency hygiene | Removed the hard Kotak SDK lock dependency and pinned patched network/auth packages. | Keeps the public dependency graph clean while preserving live Kotak support through an explicit optional SDK install. |
 | Expiry logic | Added 2026 NSE F&O holiday list and expiry left-shift tests. | Prevents using holiday expiry dates. |
 | Symbol logic | Weekly vs last-week symbol transform covered by tests. | Protects Kotak symbol formatting around monthly expiry. |
 
