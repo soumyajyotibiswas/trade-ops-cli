@@ -35,7 +35,6 @@ sys.path.append(str(project_root))
 from src.program_constants import DATA_DIR, ENVIRONMENT, PICKLE_DATA_AGE, TOKEN_EXPIRY
 from src.program_helpers import (
     configure_requests_ca_bundle,
-    mask_mobile_number,
     setup_logging,
 )
 
@@ -58,7 +57,7 @@ def _atomic_pickle_dump_bytes(payload: bytes, dest_path: Path) -> None:
     try:
         os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
     except Exception:
-        log.debug("Unable to chmod temporary session cache %s", tmp, exc_info=True)
+        log.debug("Unable to chmod temporary session cache.", exc_info=True)
     tmp.replace(dest_path)
 
 
@@ -195,7 +194,7 @@ class Login:
         """
         Load a cached client if fresh and valid; otherwise authenticate and cache safely.
         """
-        log.info("Logging in for account '%s'.", self.account_name)
+        log.info("Logging in for configured account.")
         ca_env = (
             "KOTAK_REQUESTS_CA_BUNDLE"
             if "kotak" in self.account_name.lower()
@@ -205,14 +204,14 @@ class Login:
         if self._is_session_valid():
             cached = self._load_client()
             if cached is not None and self._is_auth_valid(cached):
-                log.info("Using cached client session for '%s'.", self.account_name)
+                log.info("Using cached client session for configured account.")
                 self.client = cached
                 return self.client
             self._delete_old_session()
 
-        log.info("No valid cached session; authenticating '%s'.", self.account_name)
+        log.info("No valid cached session; authenticating configured account.")
         self.client = self._authenticate()
-        log.info("Authentication successful for '%s'.", self.account_name)
+        log.info("Authentication successful for configured account.")
         self._save_client_safely(self.client)
         return self.client
 
@@ -222,7 +221,10 @@ class Login:
             if self.client is not None and hasattr(self.client, "logout"):
                 self.client.logout()
         except Exception as e:
-            log.warning("Logout raised an exception and was ignored: %s", e)
+            log.warning(
+                "Logout raised an exception and was ignored. error_type=%s",
+                type(e).__name__,
+            )
 
     @staticmethod
     def delete_all_session_files(account_list: list[str]) -> None:
@@ -233,60 +235,43 @@ class Login:
                 try:
                     if session_file.exists():
                         session_file.unlink()
-                        log.info("Deleted cached session. account=%s", account)
+                        log.info("Deleted cached session for configured account.")
                 except Exception as e:
                     log.warning(
-                        "Failed to delete cached session. account=%s file=%s error=%s",
-                        account,
-                        session_file,
-                        e,
+                        "Failed to delete cached session. error_type=%s",
+                        type(e).__name__,
                     )
 
     def _authenticate(self) -> Any:
         """Authenticate with the trading API and return an SDK client."""
-        log.info("Starting authentication for '%s'.", self.account_name)
+        log.info("Starting authentication for configured account.")
         if "kotak" not in self.account_name.lower():
-            log.info(
-                "[5paisa] Initializing FivePaisaClient for '%s'.", self.account_name
-            )
+            log.info("[5paisa] Initializing FivePaisaClient.")
             client = _get_fivepaisa_client_class()(cred=self.cred_5paisa)
             max_retries = 2
             while max_retries > 0:
                 log.debug(
-                    "[5paisa] TOTP attempt %d/%d for '%s'.",
+                    "[5paisa] TOTP attempt %d/%d.",
                     3 - max_retries,
                     2,
-                    self.account_name,
                 )
                 totp = getpass(
                     f"Enter the TOTP for '{self.account_name}' using gAuthenticator: "
                 )
-                log.debug(
-                    "[5paisa] Calling get_totp_session for '%s'.", self.account_name
-                )
+                log.debug("[5paisa] Calling get_totp_session.")
                 client.get_totp_session(self.client_code, totp, self.pin)
-                log.debug(
-                    "[5paisa] get_totp_session completed, validating auth for '%s'.",
-                    self.account_name,
-                )
+                log.debug("[5paisa] get_totp_session completed, validating auth.")
                 if self._is_auth_valid(client):
-                    log.info(
-                        "[5paisa] Authentication successful for '%s'.",
-                        self.account_name,
-                    )
+                    log.info("[5paisa] Authentication successful.")
                     return client
                 log.warning(
-                    "[5paisa] Authentication failed for '%s', retries left: %d.",
-                    self.account_name,
+                    "[5paisa] Authentication failed; retries left: %d.",
                     max_retries - 1,
                 )
                 max_retries -= 1
-            log.error(
-                "[5paisa] Authentication failed after all retries for '%s'.",
-                self.account_name,
-            )
+            log.error("[5paisa] Authentication failed after all retries.")
         else:
-            log.info("[Kotak] Initializing NeoAPI for '%s'.", self.account_name)
+            log.info("[Kotak] Initializing NeoAPI.")
             ca_bundle = configure_requests_ca_bundle("KOTAK_REQUESTS_CA_BUNDLE")
             if ca_bundle:
                 log.info("[Kotak] Using configured CA bundle: %s", ca_bundle)
@@ -297,30 +282,23 @@ class Login:
             original_stdout = sys.stdout
             sys.stdout = io.StringIO()
             try:
-                print(
-                    f"environment: {self.environment}, consumer_key: {self.cred_kotak['CONSUMER_KEY']}, client_mobile: {mask_mobile_number(self.cred_kotak['CLIENT_MOBILE_NUMBER'])}, ucc: {self.cred_kotak['CLIENT_UCC']}, mpin: {'*' * len(self.cred_kotak['CLIENT_MPIN'])}"
-                )
                 client = _get_neo_api_class()(
                     environment=self.environment,
                     access_token=None,
                     neo_fin_key=None,
                     consumer_key=self.cred_kotak["CONSUMER_KEY"],
                 )
-                log.info(
-                    "[Kotak] NeoAPI initialized successfully for '%s'.",
-                    self.account_name,
-                )
+                log.info("[Kotak] NeoAPI initialized successfully.")
             finally:
                 sys.stdout = original_stdout
 
             self.expiry = datetime.now() + timedelta(seconds=self.token_expires_in)
             mobile_number = self.cred_kotak["CLIENT_MOBILE_NUMBER"]
-            log.info("[Kotak] Starting TOTP login process for '%s'.", self.account_name)
+            log.info("[Kotak] Starting TOTP login process.")
             for _totp_try in range(3):
                 log.debug(
-                    "[Kotak] TOTP attempt %d/3 for '%s'.",
+                    "[Kotak] TOTP attempt %d/3.",
                     _totp_try + 1,
-                    self.account_name,
                 )
                 totp = (
                     getpass(
@@ -329,16 +307,12 @@ class Login:
                     .strip()
                     .zfill(6)
                 )
-                log.debug(
-                    "[Kotak] TOTP entered, calling totp_login for '%s'.",
-                    self.account_name,
-                )
+                log.debug("[Kotak] TOTP entered, calling totp_login.")
 
                 for retry in range(5):
                     log.debug(
-                        "[Kotak][totp_login] Retry %d/5 for '%s'.",
+                        "[Kotak][totp_login] Retry %d/5.",
                         retry + 1,
-                        self.account_name,
                     )
                     try:
                         resp = client.totp_login(
@@ -355,7 +329,7 @@ class Login:
                                 "network root CA."
                             ) from e
                         raise
-                    log.debug("[Kotak][totp_login] Response: %s", resp)
+                    log.debug("[Kotak][totp_login] Response received.")
 
                     if isinstance(resp, dict) and "error" in resp:
                         err = cast(dict[str, Any], resp["error"][0])
@@ -367,83 +341,70 @@ class Login:
                             )
                             time.sleep(1)
                             continue
-                        log.error("[Kotak][totp_login] Error response: %s", resp)
-                        raise Exception(resp)
+                        log.error("[Kotak][totp_login] Error response received.")
+                        raise RuntimeError("Kotak login returned an error response.")
 
-                    log.info("[Kotak][totp_login] Success for '%s'.", self.account_name)
+                    log.info("[Kotak][totp_login] Success.")
                     break
                 else:
                     log.warning(
-                        "[Kotak][totp_login] 5 retries exhausted, asking for new TOTP for '%s'.",
-                        self.account_name,
+                        "[Kotak][totp_login] 5 retries exhausted, asking for new TOTP."
                     )
                     continue
 
-                log.info(
-                    "[Kotak][totp_login] TOTP login successful for '%s'.",
-                    self.account_name,
-                )
+                log.info("[Kotak][totp_login] TOTP login successful.")
                 break
             else:
-                log.error(
-                    "[Kotak] TOTP login failed after 3 TOTPs for '%s'.",
-                    self.account_name,
-                )
+                log.error("[Kotak] TOTP login failed after 3 TOTPs.")
                 raise Exception(
                     "Kotak totp_login failed after 3 TOTPs (5 retries each)"
                 )
 
-            log.info("[Kotak] Starting TOTP validation for '%s'.", self.account_name)
+            log.info("[Kotak] Starting TOTP validation.")
             max_retries = 5
             attempt = 1
             while max_retries > 0:
                 try:
                     log.debug(
-                        "[Kotak][totp_validate] Attempt %d/5 for '%s'.",
+                        "[Kotak][totp_validate] Attempt %d/5.",
                         attempt,
-                        self.account_name,
                     )
                     start = time.time()
                     resp = client.totp_validate(mpin=self.cred_kotak["CLIENT_MPIN"])
                     took = time.time() - start
-                    log.debug("[Kotak][totp_validate] Response: %s", resp)
+                    log.debug("[Kotak][totp_validate] Response received.")
 
                     if isinstance(resp, dict) and "error" in resp:
                         log.warning(
-                            f"[Kotak][totp_validate] attempt={attempt} "
-                            f"took={took:.2f}s resp={resp}"
+                            "[Kotak][totp_validate] attempt=%d took=%.2fs returned an error response.",
+                            attempt,
+                            took,
                         )
-                        raise Exception(resp)
+                        raise RuntimeError("Kotak login returned an error response.")
 
                     log.info(
                         f"[Kotak][totp_validate] attempt={attempt} "
                         f"took={took:.2f}s SUCCESS"
                     )
-                    log.info(
-                        "[Kotak] Authentication fully successful for '%s'.",
-                        self.account_name,
-                    )
+                    log.info("[Kotak] Authentication fully successful.")
                     return client
 
                 except Exception as e:
                     log.warning(
-                        "[Kotak][totp_validate] attempt=%d failed: %s",
+                        "[Kotak][totp_validate] attempt=%d failed. error_type=%s",
                         attempt,
-                        e,
+                        type(e).__name__,
                     )
                     max_retries -= 1
                     attempt += 1
                     if max_retries == 0:
-                        log.error(
-                            "[Kotak][totp_validate] All retries exhausted for '%s'.",
-                            self.account_name,
-                        )
+                        log.error("[Kotak][totp_validate] All retries exhausted.")
                         raise
                     time.sleep(1)
 
             return client
 
-        raise Exception(f"Authentication failed for user '{self.account_name}'.")
+        raise Exception("Authentication failed for configured account.")
 
     def _save_client_safely(self, client: Any) -> None:
         """
@@ -456,7 +417,7 @@ class Login:
         ok, payload, _err = _probe_pickle(client)
         if ok and payload:
             _atomic_pickle_dump_bytes(payload, self.client_session_file)
-            log.info("Client session cache saved. file=%s", self.client_session_file)
+            log.info("Client session cache saved.")
             return
 
         if (
@@ -480,23 +441,28 @@ class Login:
                     if ok2 and payload2:
                         _atomic_pickle_dump_bytes(payload2, self.client_session_file)
                         log.info(
-                            "Client session cache saved with detached httpx state. file=%s",
-                            self.client_session_file,
+                            "Client session cache saved with detached httpx state."
                         )
                         return
                     else:
                         log.warning(
-                            "Skipping cache save because wrapper is not picklable: %s",
-                            _err2,
+                            "Skipping cache save because wrapper is not picklable. error_type=%s",
+                            type(_err2).__name__ if _err2 else "unknown",
                         )
                         pass
                 finally:
                     setattr(client, "session", original_session)
             except Exception as e:
-                log.warning("Skipping cache save; httpx detach failed: %s", e)
+                log.warning(
+                    "Skipping cache save; httpx detach failed. error_type=%s",
+                    type(e).__name__,
+                )
                 return
 
-        log.warning("Skipping cache save because client is not picklable: %s", _err)
+        log.warning(
+            "Skipping cache save because client is not picklable. error_type=%s",
+            type(_err).__name__ if _err else "unknown",
+        )
 
     def _load_client(self) -> Any | None:
         """
@@ -510,18 +476,16 @@ class Login:
                 obj = pickle.load(f)
         except (EOFError, pickle.UnpicklingError) as e:
             log.warning(
-                "Cached session is invalid or corrupt. file=%s error=%s",
-                self.client_session_file,
-                e,
+                "Cached session is invalid or corrupt. error_type=%s",
+                type(e).__name__,
             )
             return None
         except FileNotFoundError:
             return None
         except Exception as e:
             log.warning(
-                "Failed to load cached session. file=%s error=%s",
-                self.client_session_file,
-                e,
+                "Failed to load cached session. error_type=%s",
+                type(e).__name__,
             )
             return None
 
@@ -536,7 +500,10 @@ class Login:
                 rebuilt = _rebuild_httpx_from_state(state)
                 setattr(client, "session", rebuilt)
             except Exception as e:
-                log.warning("Failed to rebuild httpx.Client from cache state: %s", e)
+                log.warning(
+                    "Failed to rebuild httpx.Client from cache state. error_type=%s",
+                    type(e).__name__,
+                )
                 return None
             return client
 
@@ -551,10 +518,10 @@ class Login:
             try:
                 if session_file.exists():
                     session_file.unlink()
-                    log.info("Deleted stale cached session. file=%s", session_file)
+                    log.info("Deleted stale cached session.")
             except Exception as e:
                 log.warning(
-                    "Failed to delete session file. file=%s error=%s", session_file, e
+                    "Failed to delete session file. error_type=%s", type(e).__name__
                 )
 
     def _is_session_valid(self) -> bool:
@@ -588,5 +555,7 @@ class Login:
                 return client.Login_check() != ".ASPXAUTH=None"
             return False
         except Exception as e:
-            log.warning("Cached authentication check failed: %s", e)
+            log.warning(
+                "Cached authentication check failed. error_type=%s", type(e).__name__
+            )
             return False

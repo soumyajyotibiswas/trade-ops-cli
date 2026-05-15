@@ -61,7 +61,7 @@ def start_background_client_tasks() -> None:
     for account_key, client in CLIENT_SESSIONS.items():
         bg = ProgramBackground(client, account_key, DF_PD, additional_client=kotak_neo)
         bg.start_background_client_tasks()
-        log.info("Started background tasks for account=%s", account_key)
+        log.info("Started background tasks for configured account.")
 
 
 def login_to_accounts() -> None:
@@ -106,13 +106,15 @@ def login_to_accounts() -> None:
         account_key = accounts[index]
         try:
             print("\n")
-            log.info("Starting login for account=%s", account_key)
+            log.info("Starting login for selected account.")
             client = Login(account_key, get_account_config(account_key, SECRETS))
             authenticated_client = client.login()
             CLIENT_SESSIONS[account_key] = authenticated_client
-            log.info("Logged in successfully. account=%s", account_key)
+            log.info("Logged in successfully for selected account.")
         except Exception as e:
-            log.exception("Failed to log in. account=%s error=%s", account_key, e)
+            log.error(
+                "Failed to log in for selected account. error_type=%s", type(e).__name__
+            )
     start_background_client_tasks()
     wait_for_user_input()
 
@@ -175,8 +177,7 @@ def place_order_for_all_clients(
 
     if KOTAK_PRIMARY_ACCOUNT not in CLIENT_SESSIONS:
         log.error(
-            "Order request cannot continue; primary Kotak account is not logged in. primary_account=%s",
-            KOTAK_PRIMARY_ACCOUNT,
+            "Order request cannot continue; primary Kotak account is not logged in."
         )
         wait_for_user_input()
         return
@@ -188,22 +189,18 @@ def place_order_for_all_clients(
                     orders = Orders(client)
                     if order_type == "sell":
                         log.info(
-                            "Dispatching sell order workflow. account=%s product=%s",
-                            account_key,
+                            "Dispatching sell order workflow. product=%s",
                             INTRADAY,
                         )
                         run_as_background_thread(sell_order_t, orders, INTRADAY)
                     elif order_type == "cancel":
-                        log.info(
-                            "Dispatching cancel order workflow. account=%s", account_key
-                        )
+                        log.info("Dispatching cancel order workflow.")
                         run_as_background_thread(cancel_order_t, orders)
                 except Exception as e:
-                    log.exception(
-                        "Failed to dispatch order workflow. account=%s type=%s error=%s",
-                        account_key,
+                    log.error(
+                        "Failed to dispatch order workflow. type=%s error_type=%s",
                         order_type,
-                        e,
+                        type(e).__name__,
                     )
         return
 
@@ -214,18 +211,15 @@ def place_order_for_all_clients(
                 orders = Orders(client)
                 if order_type == "buy":
                     log.info(
-                        "Dispatching buy order workflow. source_account=%s primary_account=%s product=%s groups=%d",
-                        key,
-                        KOTAK_PRIMARY_ACCOUNT,
+                        "Dispatching buy order workflow. product=%s groups=%d",
                         INTRADAY,
                         len(val),
                     )
                     run_as_background_thread(orders.place_buy_order_bulk, val, INTRADAY)
             except Exception as e:
-                log.exception(
-                    "Failed to dispatch buy order workflow. source_account=%s error=%s",
-                    key,
-                    e,
+                log.error(
+                    "Failed to dispatch buy order workflow. error_type=%s",
+                    type(e).__name__,
                 )
 
 
@@ -273,7 +267,7 @@ def debug_client_interaction() -> None:
             result = eval(cmd)
             print("Command result:", result)
         except Exception as e:
-            log.warning("Debug command failed for account=%s: %s", account_key, e)
+            log.warning("Debug command failed. error_type=%s", type(e).__name__)
             print("Failed to execute command:", str(e))
 
 
