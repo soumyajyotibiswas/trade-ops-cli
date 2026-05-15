@@ -1,9 +1,3 @@
-# pylint: disable=wrong-import-position
-# pylint: disable=too-many-nested-blocks
-# pylint: disable=broad-exception-caught
-# pylint: disable=line-too-long
-# pylint: disable=consider-using-f-string
-# pylint: disable=broad-exception-raised
 # ruff: noqa: E402
 
 """
@@ -30,7 +24,7 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any, cast
 
-import httpx  # needed to rebuild 5paisa's httpx.Client
+import httpx
 from neo_api_client import NeoAPI
 from py5paisa import FivePaisaClient
 
@@ -47,14 +41,13 @@ from src.program_helpers import (
 log = setup_logging("program_login")
 
 
-# --------------------------- Atomic pickle helpers --------------------------- #
-
-
 def _session_temp_path(dest_path: Path) -> Path:
+    """Return the temporary path used for atomic session-cache writes."""
     return dest_path.with_suffix(dest_path.suffix + ".tmp")
 
 
 def _atomic_pickle_dump_bytes(payload: bytes, dest_path: Path) -> None:
+    """Write pickled bytes atomically with owner-only file permissions when possible."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = _session_temp_path(dest_path)
     with open(tmp, "wb") as f:
@@ -62,21 +55,19 @@ def _atomic_pickle_dump_bytes(payload: bytes, dest_path: Path) -> None:
         f.flush()
         os.fsync(f.fileno())
     try:
-        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)  # 0600 best-effort
+        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
     except Exception:
         log.debug("Unable to chmod temporary session cache %s", tmp, exc_info=True)
     tmp.replace(dest_path)
 
 
 def _probe_pickle(obj: Any) -> tuple[bool, bytes | None, Exception | None]:
+    """Try pickling an object and return the result without raising."""
     try:
         b = pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
         return True, b, None
     except Exception as e:
         return False, None, e
-
-
-# --------------------------- 5paisa session helpers -------------------------- #
 
 
 def _extract_httpx_state(sess: httpx.Client) -> dict[str, Any]:
@@ -91,7 +82,6 @@ def _extract_httpx_state(sess: httpx.Client) -> dict[str, Any]:
     except Exception:
         headers = {}
     try:
-        # httpx Cookies is dict-like
         cookies = {str(k): str(v) for k, v in sess.cookies.items()}
     except Exception:
         cookies = {}
@@ -103,26 +93,25 @@ def _extract_httpx_state(sess: httpx.Client) -> dict[str, Any]:
 
 
 def _rebuild_httpx_from_state(state: dict[str, Any]) -> httpx.Client:
+    """Rebuild a minimal httpx.Client from serialized headers/cookies/base URL."""
     headers = state.get("headers") or {}
     cookies = state.get("cookies") or {}
     base_url = state.get("base_url") or ""
     kw = {}
     if base_url:
         kw["base_url"] = base_url
-    # You can add timeout/verify if needed; defaults are fine for py5paisa
     return httpx.Client(headers=headers, cookies=cookies, **kw)
 
 
 def _is_5paisa(obj: Any) -> bool:
+    """Return True when an object is from the py5paisa SDK package."""
     return obj is not None and obj.__class__.__module__.startswith("py5paisa.")
 
 
 def _is_ssl_verification_error(exc: Exception) -> bool:
+    """Return True when an exception message looks like certificate failure."""
     msg = str(exc)
     return "SSLError" in msg or "CERTIFICATE_VERIFY_FAILED" in msg
-
-
-# --------------------------------- Login ------------------------------------- #
 
 
 class Login:
@@ -135,6 +124,7 @@ class Login:
     """
 
     def __init__(self, account_name: str, account_details: dict[str, str]) -> None:
+        """Build a login manager for one configured account."""
         self.account_name = account_name
         self.account_details = account_details
 
@@ -162,12 +152,9 @@ class Login:
         )
         self.client: Any | None = None
 
-        # Kotak runtime fields
         self.environment = ENVIRONMENT
         self.token_expires_in = TOKEN_EXPIRY
         self.expiry: datetime | None = None
-
-    # ------------------------------- Public API ------------------------------ #
 
     def login(self) -> Any:
         """
@@ -181,15 +168,13 @@ class Login:
         )
         configure_requests_ca_bundle(ca_env)
         if self._is_session_valid():
-            cached = self._load_client()  # handles corrupt/empty pickles
+            cached = self._load_client()
             if cached is not None and self._is_auth_valid(cached):
                 log.info("Using cached client session for '%s'.", self.account_name)
                 self.client = cached
-                # log.info("Loaded client from cache for '%s'.", self.account_name)
                 return self.client
             self._delete_old_session()
 
-        # Fresh authentication
         log.info("No valid cached session; authenticating '%s'.", self.account_name)
         self.client = self._authenticate()
         log.info("Authentication successful for '%s'.", self.account_name)
@@ -222,13 +207,10 @@ class Login:
                         e,
                     )
 
-    # ------------------------------ Internals -------------------------------- #
-
     def _authenticate(self) -> Any:
         """Authenticate with the trading API and return an SDK client."""
         log.info("Starting authentication for '%s'.", self.account_name)
         if "kotak" not in self.account_name.lower():
-            # 5paisa
             log.info(
                 "[5paisa] Initializing FivePaisaClient for '%s'.", self.account_name
             )
@@ -252,7 +234,6 @@ class Login:
                     "[5paisa] get_totp_session completed, validating auth for '%s'.",
                     self.account_name,
                 )
-                # surface any errors immediately instead of silently caching an unauthenticated client
                 if self._is_auth_valid(client):
                     log.info(
                         "[5paisa] Authentication successful for '%s'.",
@@ -270,7 +251,6 @@ class Login:
                 self.account_name,
             )
         else:
-            # Kotak Neo
             log.info("[Kotak] Initializing NeoAPI for '%s'.", self.account_name)
             ca_bundle = configure_requests_ca_bundle("KOTAK_REQUESTS_CA_BUNDLE")
             if ca_bundle:
@@ -282,7 +262,6 @@ class Login:
             original_stdout = sys.stdout
             sys.stdout = io.StringIO()
             try:
-                # client = NeoAPI(environment="prod", access_token=None, neo_fin_key=None)
                 print(
                     f"environment: {self.environment}, consumer_key: {self.cred_kotak['CONSUMER_KEY']}, client_mobile: {mask_mobile_number(self.cred_kotak['CLIENT_MOBILE_NUMBER'])}, ucc: {self.cred_kotak['CLIENT_UCC']}, mpin: {'*' * len(self.cred_kotak['CLIENT_MPIN'])}"
                 )
@@ -356,18 +335,15 @@ class Login:
                         log.error("[Kotak][totp_login] Error response: %s", resp)
                         raise Exception(resp)
 
-                    # success
                     log.info("[Kotak][totp_login] Success for '%s'.", self.account_name)
                     break
                 else:
-                    # 5 retries exhausted for this TOTP -> ask for a new TOTP
                     log.warning(
                         "[Kotak][totp_login] 5 retries exhausted, asking for new TOTP for '%s'.",
                         self.account_name,
                     )
                     continue
 
-                # totp_login succeeded -> exit outer loop
                 log.info(
                     "[Kotak][totp_login] TOTP login successful for '%s'.",
                     self.account_name,
@@ -382,7 +358,6 @@ class Login:
                     "Kotak totp_login failed after 3 TOTPs (5 retries each)"
                 )
 
-            # ---- retry only totp_validate ----
             log.info("[Kotak] Starting TOTP validation for '%s'.", self.account_name)
             max_retries = 5
             attempt = 1
@@ -398,7 +373,6 @@ class Login:
                     took = time.time() - start
                     log.debug("[Kotak][totp_validate] Response: %s", resp)
 
-                    # DEBUG: Kotak may return dict instead of raising
                     if isinstance(resp, dict) and "error" in resp:
                         log.warning(
                             f"[Kotak][totp_validate] attempt={attempt} "
@@ -431,7 +405,6 @@ class Login:
                         )
                         raise
                     time.sleep(1)
-            # ---------------------------------
 
             return client
 
@@ -451,7 +424,6 @@ class Login:
             log.info("Client session cache saved. file=%s", self.client_session_file)
             return
 
-        # Likely the 5paisa httpx.Client (RLock) case
         if (
             _is_5paisa(client)
             and hasattr(client, "session")
@@ -461,7 +433,6 @@ class Login:
                 sess: httpx.Client = getattr(client, "session")
                 session_state = _extract_httpx_state(sess)
 
-                # Temporarily detach unpicklable httpx.Client
                 original_session = sess
                 setattr(client, "session", None)
                 try:
@@ -485,13 +456,11 @@ class Login:
                         )
                         pass
                 finally:
-                    # Restore in-memory client to original state
                     setattr(client, "session", original_session)
             except Exception as e:
                 log.warning("Skipping cache save; httpx detach failed: %s", e)
                 return
 
-        # Anything else: skip caching silently
         log.warning("Skipping cache save because client is not picklable: %s", _err)
 
     def _load_client(self) -> Any | None:
@@ -521,7 +490,6 @@ class Login:
             )
             return None
 
-        # Wrapper format?
         if (
             isinstance(obj, dict)
             and obj.get("format") == "5paisa+httpx@v1"
@@ -537,10 +505,10 @@ class Login:
                 return None
             return client
 
-        # Legacy: direct client instance
         return obj
 
     def _delete_old_session(self) -> None:
+        """Remove stale session cache files for this account."""
         for session_file in (
             self.client_session_file,
             _session_temp_path(self.client_session_file),

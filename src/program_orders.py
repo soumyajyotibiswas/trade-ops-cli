@@ -2,12 +2,6 @@
 This module contains the Orders class which is used to place buy and sell orders.
 """
 
-# pylint: disable=wrong-import-position
-# pylint: disable=too-many-nested-blocks
-# pylint: disable=broad-exception-caught
-# pylint: disable=line-too-long
-# pylint: disable=consider-using-f-string
-# pylint: disable=fixme
 # ruff: noqa: E402
 
 import copy
@@ -60,14 +54,17 @@ MAX_QTY_OVERRIDES = {"BANKEX": 900, "MIDCPNifty": 2800}
 
 
 def _is_neo_client(client: Any) -> bool:
+    """Return True when the SDK object looks like a Kotak Neo client."""
     return "NeoWebSocket" in dir(client)
 
 
 def _is_supported_index_symbol(trading_symbol: str) -> bool:
+    """Return True when a trading symbol belongs to a supported index option."""
     return any(symbol in trading_symbol for symbol in SUPPORTED_INDEX_SYMBOLS)
 
 
 def _positions_data(response: Any) -> list[dict[str, Any]]:
+    """Normalize broker position responses into a list of dictionaries."""
     if response is None:
         return []
     if isinstance(response, list):
@@ -80,6 +77,7 @@ def _positions_data(response: Any) -> list[dict[str, Any]]:
 
 
 def _infer_position_symbol(trading_symbol: str) -> str | None:
+    """Infer the index key from a broker trading symbol."""
     for marker, index_name in POSITION_SYMBOL_INFERENCE:
         if marker in trading_symbol:
             return index_name
@@ -89,6 +87,7 @@ def _infer_position_symbol(trading_symbol: str) -> str | None:
 def _max_order_quantity(
     index_name: str, *, use_floor_division: bool, apply_special_overrides: bool = True
 ) -> int | float:
+    """Return the max quantity per child order for the configured index."""
     if apply_special_overrides and index_name in MAX_QTY_OVERRIDES:
         return MAX_QTY_OVERRIDES[index_name]
 
@@ -102,12 +101,14 @@ def _max_order_quantity(
 
 
 def _product_from_intraday(intraday: bool | str) -> str:
+    """Map the historical intraday flag into the broker product string."""
     if isinstance(intraday, str):
         return intraday
     return "MIS" if intraday else "NRML"
 
 
 def _order_summary(order_details: dict[str, Any]) -> str:
+    """Return a compact, non-secret order summary for logs."""
     symbol = (
         order_details.get("trading_symbol")
         or order_details.get("ScripCode")
@@ -124,18 +125,21 @@ def _order_summary(order_details: dict[str, Any]) -> str:
 
 
 def _dry_run_response(action: str, payload: Any) -> dict[str, Any]:
+    """Return a structured dry-run response without calling the broker."""
     log.info("[DRY_RUN] Skipping mutating broker call. action=%s", action)
     log.debug("[DRY_RUN] Payload for action=%s: %s", action, payload)
     return {"dry_run": True, "action": action, "payload": payload}
 
 
 def _place_order(client: Any, order_details: dict[str, Any]) -> dict[str, Any]:
+    """Place an order or return the dry-run payload."""
     if DRY_RUN_ORDERS:
         return _dry_run_response("place_order", order_details)
     return client.place_order(**order_details)
 
 
 def _cancel_order(client: Any, order_id: str) -> dict[str, Any]:
+    """Cancel one order or return the dry-run payload."""
     if DRY_RUN_ORDERS:
         return _dry_run_response("cancel_order", {"order_id": order_id})
     return client.cancel_order(order_id=order_id)
@@ -144,6 +148,7 @@ def _cancel_order(client: Any, order_id: str) -> dict[str, Any]:
 def _cancel_bulk_order(
     client: Any, cancel_order_list: list[dict[str, Any]]
 ) -> dict[str, Any]:
+    """Cancel a 5paisa bulk order list or return the dry-run payload."""
     if DRY_RUN_ORDERS:
         return _dry_run_response("cancel_bulk_order", cancel_order_list)
     return client.cancel_bulk_order(cancel_order_list)
@@ -164,6 +169,7 @@ class Orders:
     """
 
     def __init__(self, client: Any) -> None:
+        """Store the broker SDK client used for order operations."""
         self.client = client
 
     def place_buy_order_bulk(
@@ -184,6 +190,7 @@ class Orders:
         """
 
         def place_buy_order_bulk_t(order_in: dict[str, Any]) -> None:
+            """Submit one prepared buy order payload in a background thread."""
             try:
                 disable_loguru_to_devnull()
                 log.info("Submitting buy order. %s", _order_summary(order_in))
@@ -195,36 +202,6 @@ class Orders:
                     response,
                 )
 
-                # # Check if the response indicates a throttling error
-                # if response.get("code") == "900804" and "nextAccessTime" in response:
-                #     next_access_time_str = clean_isoformat_string(
-                #         response["nextAccessTime"]
-                #     )
-                #     ##log.info("Next access time str: %s", next_access_time_str)
-                #     next_access_time = datetime.fromisoformat(
-                #         next_access_time_str
-                #     ).replace(tzinfo=timezone.utc)
-                #     ##log.info("Next access time: %s", next_access_time)
-
-                #     # Calculate the difference between the current time and the next access time
-                #     current_time = datetime.now(timezone.utc)
-                #     time_diff = (next_access_time - current_time).total_seconds()
-
-                #     ##log.info(
-                #         "Current time: %s, Next access time: %s, Time difference: %s seconds",
-                #         current_time,
-                #         next_access_time,
-                #         time_diff,
-                #     )
-
-                #     if time_diff > 0 and time_diff < 30:
-                #         ##log.info("Waiting for %s seconds before retrying...", time_diff)
-                #         time.sleep(time_diff)
-                #         ##log.info("Retrying to place the order...")
-                #         response = self.client.place_order(**order_in)
-                #         ##log.info("Order placed after retry: %s", order_in)
-                #         ##log.info("Response: %s", response)
-
             except Exception as e:
                 log.exception(
                     "Failed to submit buy order. %s error=%s",
@@ -233,42 +210,29 @@ class Orders:
                 )
 
         try:
-            # #log.info("Bulk order: %s", bulk_order)
-            for index_a, order in enumerate(bulk_order):
-                # #log.info("Order: %s", order[0])
+            for order in bulk_order:
                 order_in = order[0]
 
-                # Calculate max_qty based on the index
                 max_qty = _max_order_quantity(
                     order_in["index"], use_floor_division=True
                 )
-                # #log.info("Max qty: %s", max_qty)
 
                 del order_in["index"]
                 del order_in["tag"]
-                # Set the product type based on intraday flag
                 order_in["product"] = _product_from_intraday(intraday)
 
-                # #log.info("Updated Order in: %s", order_in)
-                # Split the order into chunks if quantity exceeds max_qty
                 qty_remaining = int(order_in["quantity"])
-                # #log.info("Max qty: %s", max_qty)
                 order_count = 0
                 while qty_remaining > 0:
                     qty_to_order = min(qty_remaining, max_qty)
-                    # #log.info("Qty remaining: %s", qty_remaining)
-                    order_copy = copy.deepcopy(
-                        order_in
-                    )  # Create a copy of the order dictionary
+                    order_copy = copy.deepcopy(order_in)
                     order_copy["quantity"] = str(qty_to_order)
-                    # #log.info("Placing background Order in: %s", order_copy)
                     run_as_background_thread(place_buy_order_bulk_t, order_copy)
                     qty_remaining -= qty_to_order
                     order_count += 1
                     if order_count % 10 == 0:
                         time.sleep(0.75)
 
-                # #log.info("Placing Order: %s", index_a)
         except Exception as e:
             log.exception("Error preparing bulk buy orders: %s", e)
 
@@ -279,6 +243,7 @@ class Orders:
         """
 
         def get_live_ltp_from_kotak_position(position: dict[str, Any]) -> float:
+            """Fetch live Kotak LTP for the instrument token in a position row."""
             response = self.client.quotes(
                 instrument_tokens=[
                     {
@@ -323,7 +288,7 @@ class Orders:
                 )
 
         try:
-            if _is_neo_client(self.client):  # trip wire
+            if _is_neo_client(self.client):
                 open_positions = _positions_data(self.client.positions())
 
                 for position in open_positions:
@@ -477,7 +442,7 @@ class Orders:
             None
         """
         try:
-            if _is_neo_client(self.client):  # trip wire
+            if _is_neo_client(self.client):
                 open_orders = self.client.order_report()
                 for order in open_orders.get("data", []):
                     if order.get("ordSt") == "open":
@@ -494,7 +459,6 @@ class Orders:
             response = self.client.order_book()
             max_attempts = 2
             total_attempts = 0
-            # #log.info("Order book: %s", response)
             while total_attempts < max_attempts and response is not None:
                 cancel_order_list = [
                     {"ExchOrderID": item["ExchOrderID"]}
@@ -514,7 +478,6 @@ class Orders:
                 )
                 response = self.client.order_book()
                 total_attempts += 1
-            # restore_loguru()
         except Exception as e:
             log.exception("Error cancelling open orders: %s", e)
 
@@ -526,7 +489,6 @@ class Orders:
             list[dict[str, Any]]: A list of dictionaries representing the open positions.
         """
         try:
-            # disable_loguru_to_devnull()
             open_positions = _positions_data(self.client.positions())
             display_positions = []
             for position in open_positions:
@@ -539,7 +501,6 @@ class Orders:
                         "Qty": position["NetQty"],
                     }
                     display_positions.append(new_entry)
-            # restore_loguru()
             return display_positions
         except Exception as e:
             log.warning("Error retrieving open positions: %s", e)
@@ -553,7 +514,7 @@ class Orders:
             int: The number of completed orders.
         """
         try:
-            if _is_neo_client(self.client):  # trip wire
+            if _is_neo_client(self.client):
                 response = self.client.order_report()
                 count = len(
                     [

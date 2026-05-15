@@ -8,6 +8,8 @@ from typing import TypeAlias, TypedDict
 
 
 class IndexDetails(TypedDict):
+    """Typed metadata required for index quote, expiry, and order calculations."""
+
     symbol: str
     weekly_expiry: str
     monthly_expiry: str
@@ -26,6 +28,7 @@ IndexDetailsMap: TypeAlias = dict[str, IndexDetails]
 
 
 def _read_bool_env(*names: str, default: bool = False) -> bool:
+    """Read the first matching boolean environment variable from a name list."""
     for name in names:
         raw_value = os.getenv(name)
         if raw_value is not None:
@@ -149,7 +152,6 @@ MARKET_CLOSE_FETCH_INTERVAL = 1800  # in seconds
 MARKET_OPEN_TIME = "09:15:00"
 MARKET_CLOSE_TIME = "15:30:00"
 MARKET_OPEN_DAYS: list[str] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-# NSE F&O trading holidays for calendar year 2026, circular NSE/FAOP/71777.
 HOLIDAY_LIST: list[str] = [
     "20260126",
     "20260303",

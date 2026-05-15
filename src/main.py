@@ -1,12 +1,3 @@
-# pylint: disable=wrong-import-position
-# pylint: disable=too-many-nested-blocks
-# pylint: disable=broad-exception-caught
-# pylint: disable=line-too-long
-# pylint: disable=consider-using-f-string
-# pylint: disable=dangerous-default-value
-# pylint: disable=eval-used
-# pylint: disable=global-variable-not-assigned
-# pylint: disable=global-statement
 # ruff: noqa: E402
 
 """
@@ -20,7 +11,6 @@ from typing import Any, cast
 
 import pandas as pd
 
-# Get the absolute path of the project root directory, which contains the 'src' directory.
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
@@ -193,9 +183,8 @@ def place_order_for_all_clients(
 
     if order_type in {"sell", "cancel"}:
         for account_key, client in CLIENT_SESSIONS.items():
-            if account_key == KOTAK_PRIMARY_ACCOUNT:  # trip wire
+            if account_key == KOTAK_PRIMARY_ACCOUNT:
                 try:
-                    # orders = Orders(client, CLIENT_SESSIONS)
                     orders = Orders(client)
                     if order_type == "sell":
                         log.info(
@@ -221,8 +210,7 @@ def place_order_for_all_clients(
     for response in response_option or []:
         for key, val in response.items():
             try:
-                client = CLIENT_SESSIONS[KOTAK_PRIMARY_ACCOUNT]  # trip wire
-                # orders = Orders(client, CLIENT_SESSIONS)
+                client = CLIENT_SESSIONS[KOTAK_PRIMARY_ACCOUNT]
                 orders = Orders(client)
                 if order_type == "buy":
                     log.info(
@@ -269,7 +257,7 @@ def debug_client_interaction() -> None:
         return
 
     account_key = account_keys[selected]
-    client = CLIENT_SESSIONS[account_key]  # noqa: F841 - used by eval below.
+    client = CLIENT_SESSIONS[account_key]  # noqa: F841 - referenced by eval below.
 
     while True:
         print(
@@ -282,7 +270,6 @@ def debug_client_interaction() -> None:
             print("Invalid command. Ensure your command starts with 'client.'")
             continue
         try:
-            # Using eval to execute the command
             result = eval(cmd)
             print("Command result:", result)
         except Exception as e:
@@ -308,7 +295,6 @@ def show_logged_in_accounts() -> None:
 
 
 def main_menu() -> None:
-    # disable_loguru_to_devnull()
     """
     Displays the main menu and handles user input for various options.
 
@@ -321,19 +307,15 @@ def main_menu() -> None:
     """
 
     def log_and_update_file_descriptor_limit() -> None:
-        # Get current limits
+        """Raise the soft file descriptor limit for concurrent background workers."""
         _soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
         log.info(
             "Current file descriptor limit. soft=%s hard=%s", _soft_limit, hard_limit
         )
 
-        # Set the soft limit to the maximum allowable value
-        new_soft_limit = min(
-            4096, hard_limit
-        )  # Setting to 4096 or lower if hard limit is less
+        new_soft_limit = min(4096, hard_limit)
         resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft_limit, hard_limit))
 
-        # Log the new limits
         _updated_soft_limit, _updated_hard_limit = resource.getrlimit(
             resource.RLIMIT_NOFILE
         )
@@ -353,33 +335,8 @@ def main_menu() -> None:
     DF_PD = create_data_frame_from_scrip_master_csv(SCRIP_MASTER_FILE_PATH)
     remove_old_logs(LOGS_DIR)
     while True:
-        # # Only if time is between 8:00 am to 11am or 3pm to 3:45pm
-        # now = datetime.datetime.now()
-        # current_time = now.time()
-
-        # # Define the time ranges
-        # morning_start = datetime.time(8, 0)
-        # morning_end = datetime.time(11, 0)
-        # afternoon_start = datetime.time(14, 45)
-        # afternoon_end = datetime.time(15, 45)
-
-        # # Check if current time is outside both time ranges
-        # if not (
-        #     morning_start <= current_time <= morning_end
-        #     or afternoon_start <= current_time <= afternoon_end
-        # ):
-        #     print(
-        #         current_time, morning_start, morning_end, afternoon_start, afternoon_end
-        #     )
-        #     print(
-        #         "The main menu is only available between 8:00 am to 11:00 am and 2:45 pm to 3:45 pm."
-        #     )
-        #     wait_for_user_input()
-        #     return
-
         try:
-            # disable_loguru_to_devnull()
-            clear_screen()  # Clear the screen before showing the main menu
+            clear_screen()
             print("\t\t\t\tTrade with 5paisa\n")
             print("Main Menu:\n")
             options = [
@@ -399,7 +356,6 @@ def main_menu() -> None:
                 print(f"{i + 1}. {option}")
 
             choice = input("\nSelect an option: ")
-            # log.info("User selected option %s\n", choice)
             if choice.isdigit():
                 choice = int(choice)
                 if choice == 1:
@@ -443,8 +399,6 @@ def main_menu() -> None:
                                 break
                         if not response_option:
                             continue
-                        # log.info("Placing buy order for all clients")
-                        # log.info(response_option)
                         place_order_for_all_clients(
                             "buy", cast(list[dict[str, Any]], response_option)
                         )
@@ -460,11 +414,7 @@ def main_menu() -> None:
                 elif choice == 7:
                     debug_client_interaction()
                 elif choice == 8:
-                    # log.info(
-                    #     "Flipping delivery flag for all clients, current value: %s",
-                    #     INTRADAY,
-                    # )
-                    if INTRADAY == "MIS":  # trip wire
+                    if INTRADAY == "MIS":
                         INTRADAY = "NRML"
                     else:
                         INTRADAY = "MIS"
@@ -491,7 +441,7 @@ def main_menu() -> None:
                     wait_for_user_input()
             else:
                 log.warning("Non-numeric main menu input: %s", choice)
-                wait_for_user_input()  # Wait for user to acknowledge the error
+                wait_for_user_input()
         except Exception as e:
             log.exception("Main menu loop recovered from error: %s", e)
             continue

@@ -1,11 +1,3 @@
-# pylint: disable=wrong-import-position
-# pylint: disable=too-many-nested-blocks
-# pylint: disable=broad-exception-caught
-# pylint: disable=line-too-long
-# pylint: disable=consider-using-f-string
-# pylint: disable=inconsistent-return-statements
-# pylint: disable=dangerous-default-value
-# pylint: disable=too-many-locals
 # ruff: noqa: E402
 
 """
@@ -39,6 +31,7 @@ class ProgramDisplay:
         client_sessions: dict[str, Any],
         index_details: Mapping[str, Any],
     ) -> None:
+        """Store active sessions and index metadata for menu rendering."""
         self.client_sessions = client_sessions
         self.index_details = index_details
 
@@ -76,12 +69,6 @@ class ProgramDisplay:
         Returns:
             None
         """
-        # How to order the list
-        # If it is monday, then choose FINNIFTY first, then BANKNIFTY, then NIFTY, and then SENSEX
-        # If it is tuesday, then choose FINNIFTY first, then BANKNIFTY, then NIFTY, and then SENSEX
-        # If it is wednesday, then choose BANKNIFTY first, then NIFTY, then NIFTY, then SENSEX, and then FINNIFTY
-        # If it is thursday, then choose NIFTY first, then SENSEX, then FINNIFTY, then SENSEX, and then BANKNIFTY
-        # If it is friday, then choose SENSEX first, then FINNIFTY, then BANKNIFTY, then NIFTY
         menu_list = [] if menu_list is None else menu_list
         if clear_screen_out:
             self.clear_screen()
@@ -119,7 +106,6 @@ class ProgramDisplay:
         """
         if isinstance(user_choice, str) and user_choice.lower() == "b":
             self.go_back_to_previous_menu()
-        # Validate the user choice
         return user_choice in self.get_menu_options(menu_list)
 
     def go_back_to_previous_menu(self) -> None:
@@ -183,10 +169,8 @@ class ProgramDisplay:
         """
         concatenated_data = []
 
-        # Loop through both CE and PE option types and concatenate the data
         for option_type in [OPTION_TYPE_CALL, OPTION_TYPE_PUT]:
             any_client_key = "ACCOUNT_5PAISA_PRIMARY".lower()
-            # log.info("Any client key: %s", any_client_key)
             file_path_any_client = (
                 DATA_DIR / any_client_key / f"{index_key}_options.json"
             )
@@ -195,26 +179,18 @@ class ProgramDisplay:
             index_data = read_data_from_file(index_file)
             if not index_data:
                 raise ValueError(f"No data found for the selected index {index_key}.")
-            # {
-            #     "index": "BANKNIFTY",
-            #     "quote": 47859.45,
-            #     "current_week_expiry_date": "2024-05-15",
-            #     "timestamp": "2024-05-15 08:53:34 +5:30"
-            # }
             index_quote = index_data.get("quote", "NA")
             if not file_contents_any_client:
                 raise ValueError(
                     f"No data found for the selected index {index_key} and option type {option_type}."
                 )
 
-            # List of symbols for the specified index and option type
             filtered_options_symbols_any_client = [
                 option["Index_Symbol"]
                 for option in file_contents_any_client
                 if option["Index_Symbol"].startswith(index_key)
                 and option["OptionType"] == option_type
             ]
-            # Create the base DataFrame from the first client's filtered symbols
             df = pd.DataFrame(
                 {
                     "Symbol": filtered_options_symbols_any_client,
@@ -225,7 +201,6 @@ class ProgramDisplay:
                     ],
                 }
             )
-            # Adding client columns to the DataFrame
             for client_key in client_sessions.keys():
                 if client_key == "ACCOUNT_5PAISA_PRIMARY":
                     client_dir_path = DATA_DIR / client_key.lower()
@@ -237,7 +212,6 @@ class ProgramDisplay:
                             f"No data found for the selected index {index_key} and option type {option_type}."
                         )
 
-                    # Mapping each symbol to quantity and margin
                     client_info = {
                         option[
                             "Index_Symbol"
@@ -246,7 +220,6 @@ class ProgramDisplay:
                         if option["Index_Symbol"] in filtered_options_symbols_any_client
                     }
 
-                    # Add client-specific data to the DataFrame
                     header_name = f"{client_key.upper()} [Qty | M]"
                     df[header_name] = df["Symbol"].map(client_info).fillna("NA")
 
@@ -262,11 +235,8 @@ class ProgramDisplay:
 
             concatenated_data.append(df)
 
-        # Concatenate the CE and PE dataframes vertically
         final_df = pd.concat(concatenated_data, ignore_index=True)
-        final_df.insert(
-            0, "S.No.", range(1, len(final_df) + 1)
-        )  # Inserting S.No. at the beginning
+        final_df.insert(0, "S.No.", range(1, len(final_df) + 1))
 
         return final_df, index_quote
 
@@ -281,7 +251,6 @@ class ProgramDisplay:
         Returns:
             None
         """
-        # log.info("Refreshing the option sub-menu for index %s.", index_key)
         self.display_option_data_menu_to_user_submenu(index_key)
 
     def display_option_data_menu_to_user_submenu(self, index_key: str) -> Any:
@@ -296,9 +265,7 @@ class ProgramDisplay:
             list: The bulk order lists based on the user's choice.
         """
         client_sessions = self.client_sessions
-        # log.info("Client sessions: %s", client_sessions)
         df, index_quote = self.create_dynamic_table(client_sessions, index_key)
-        # log.info("Option data for index %s: %s", index_key, df)
         self.clear_screen()
         self.display_menu_title(f"Option Data for {index_key} -- {index_quote}")
         self.pretty_print_data_frame(df)
@@ -357,16 +324,12 @@ class ProgramDisplay:
         Raises:
             ValueError: If no data is found for the specified serial number.
         """
-        # Find the row index in the dataframe that matches the user's choice of S.No.
         row_index = df[df["S.No."] == user_choice].index
 
         if not row_index.empty:
-            row_index = row_index[
-                0
-            ]  # Assuming S.No. are unique and taking the first match
+            row_index = row_index[0]
             bulk_order_lists = []
 
-            # Loop through each column to find those ending with "-BulkOrderList-Hidden"
             for col in df.columns:
                 if col.endswith("-BulkOrderList-Hidden"):
                     client_key = col.replace("-BulkOrderList-Hidden", "")

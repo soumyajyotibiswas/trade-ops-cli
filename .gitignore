@@ -131,7 +131,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.vscode
+.vscode/
+.idea/
+.envrc
+.direnv/
 
 # OS/editor noise
 .DS_Store
@@ -168,21 +171,39 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Files
+# Secrets and local-only config
 src/program_secrets*.py
 !src/program_secrets.example.py
 src/temp_file.py
 src/Pipfile
 src/Pipfile.lock
 src/requirements.txt
+.python-version
 
 # Runtime data, logs, and local safety snapshots
-data/*
+data/
 logs/
 backups/
 *.tmp
 *.pkl
 *.pickle
+*.session
 
-# Pycache
-__pycache__/
+# Local certificate/key material
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# Tool caches
+.ruff_cache/
+.pyright/
+
+# Editor/merge leftovers
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo

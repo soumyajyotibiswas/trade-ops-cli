@@ -1,14 +1,4 @@
-# pylint: disable=protected-access
-# pylint: disable=unused-variable
-# pylint: disable=global-variable-not-assigned
-# pylint: disable=unused-argument
-# pylint: disable=unspecified-encoding
-# pylint: disable=global-statement
-# pylint: disable=line-too-long
-
-"""
-This module contains helper functions for the trading program.
-"""
+"""Shared helpers for logging, IO, threading, signals, and broker data files."""
 
 import json
 import logging
@@ -45,6 +35,7 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 def _configured_log_level() -> int:
+    """Return the configured logging level, defaulting to INFO."""
     level_name = os.getenv("TRADING_PROGRAM_LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
     return getattr(logging, level_name, logging.INFO)
 
@@ -89,6 +80,7 @@ def configure_requests_ca_bundle(
 
 
 def disable_loguru_to_devnull() -> None:
+    """Temporarily redirect loguru output from noisy SDK internals to /dev/null."""
     global ORIGINAL_LOGURU_HANDLERS
     loguru_core = cast(Any, loguru_logger)._core
     ORIGINAL_LOGURU_HANDLERS = loguru_core.handlers.copy()
@@ -97,7 +89,8 @@ def disable_loguru_to_devnull() -> None:
 
 
 def restore_loguru() -> None:
-    loguru_logger.remove()  # Remove the devnull handler
+    """Restore loguru handlers saved before disabling loguru output."""
+    loguru_logger.remove()
     for handler_id, handler in ORIGINAL_LOGURU_HANDLERS.items():
         loguru_logger.add(**handler)
 
@@ -143,7 +136,7 @@ def get_scrip_master() -> None:
         print(file_mod_time)
         if datetime.now() - file_mod_time < timedelta(hours=48):
             print("Scrip Master file is up-to-date.")
-            return  # File is up-to-date, no need to download
+            return
         else:
             print("Scrip Master file is outdated, downloading new file.")
     else:
@@ -155,10 +148,8 @@ def get_scrip_master() -> None:
             timeout=300,
             verify=ca_bundle if ca_bundle else True,
         )
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        # Ensure DATA_DIR exists
+        response.raise_for_status()
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        # Write the content to a file
         with open(SCRIP_MASTER_FILE_PATH, "wb") as f:
             f.write(response.content)
         print("Scrip Master file has been downloaded and saved.")
@@ -270,17 +261,12 @@ def create_index_json_files(
     Returns:
         None
     """
-    # Ensure the directory exists
     Path(directory).mkdir(parents=True, exist_ok=True)
 
-    # Iterate over each item in the dictionary
     for key, _details in data.items():
-        # Define the file path
         file_path = Path(directory) / f"{key}_details.json"
 
-        # Check if the file already exists
         if not file_path.exists():
-            # Create an empty file if it does not exist
             file_path.touch()
             print(f"File created: {file_path}")
         else:
@@ -303,7 +289,7 @@ def create_data_frame_from_scrip_master_csv(file_path: Path) -> pd.DataFrame:
     if not isinstance(file_path, Path):
         file_path = Path(file_path)
     df_pd = pd.read_csv(file_path)
-    print(df_pd.columns)  # Check what columns are present
+    print(df_pd.columns)
     df_pd.set_index("Name", inplace=True)
     return df_pd
 
@@ -363,12 +349,13 @@ def thread_function(name: str) -> None:
     try:
         while True:
             print(f"Thread {name}: updating data...")
-            time.sleep(1)  # Simulate work by sleeping
+            time.sleep(1)
     except KeyboardInterrupt:
         print(f"Thread {name} received a signal to terminate")
 
 
 def _run_background_target(target: Callable[..., Any], *args: Any) -> None:
+    """Run a background target and log uncaught exceptions."""
     try:
         target(*args)
     except Exception:
@@ -401,8 +388,8 @@ def signal_handler(signum: int, frame: Any) -> None:
 
 def setup_signal_handlers() -> None:
     """Setup signal handling to gracefully handle termination."""
-    signal.signal(signal.SIGINT, signal_handler)  # Handle Ctrl-C
-    signal.signal(signal.SIGTERM, signal_handler)  # Handle kill command
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
 
 def create_scrip_code_match(
@@ -443,9 +430,8 @@ def fetch_scrip_code_from_csv(df_pd: pd.DataFrame, to_match: str) -> Any:
     Raises:
     - ValueError: If the scrip code for the given name is not found in the DataFrame.
     """
-    # Check if the name exists in the index
     if to_match in df_pd.index:
-        scrip_code = df_pd.loc[to_match, "ScripCode"]  # Corrected the column name here
+        scrip_code = df_pd.loc[to_match, "ScripCode"]
         return scrip_code
     raise ValueError(f"Scripcode for {to_match} not found.")
 
@@ -462,24 +448,18 @@ def remove_old_logs(logs_dir: Path, days: int = 2) -> None:
     current_time = datetime.now()
     cutoff_time = current_time - timedelta(days=days)
 
-    # First, remove files older than the specified number of days
     for log_file in logs_dir.rglob("*"):
-        if log_file.is_file():  # Ensure it's a file
+        if log_file.is_file():
             modification_time = datetime.fromtimestamp(log_file.stat().st_mtime)
             if modification_time < cutoff_time:
-                log_file.unlink()  # Delete the file
+                log_file.unlink()
 
-    # Then, keep only the latest three files in each subdirectory
     for subdirectory in [d for d in logs_dir.iterdir() if d.is_dir()]:
-        file_list = list(subdirectory.glob("*"))  # Get all files in the subdirectory
-        file_list = [f for f in file_list if f.is_file()]  # Filter out directories
+        file_list = list(subdirectory.glob("*"))
+        file_list = [f for f in file_list if f.is_file()]
         if len(file_list) > 3:
-            file_list.sort(
-                key=lambda x: x.stat().st_mtime, reverse=True
-            )  # Sort by modification time, newest first
-            for file_to_delete in file_list[
-                3:
-            ]:  # Remove all but the three newest files
+            file_list.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            for file_to_delete in file_list[3:]:
                 file_to_delete.unlink()
 
 

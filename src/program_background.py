@@ -1,8 +1,3 @@
-# pylint: disable=wrong-import-position
-# pylint: disable=too-many-nested-blocks
-# pylint: disable=broad-exception-caught
-# pylint: disable=line-too-long
-# pylint: disable=consider-using-f-string
 # ruff: noqa: E402
 
 """
@@ -69,10 +64,12 @@ WEEKLY_EXPIRY_MONTH_CODES = {
 
 
 def _is_neo_client(client: Any) -> bool:
+    """Return True when the SDK object looks like a Kotak Neo client."""
     return "NeoWebSocket" in dir(client)
 
 
 def _log_background_exception(task_name: str, exc: Exception) -> None:
+    """Rate-limit repeated background-task warnings for noisy retry loops."""
     now = time.monotonic()
     last_logged_at = _LAST_BACKGROUND_ERROR_LOGGED_AT.get(task_name, 0.0)
     if now - last_logged_at < BACKGROUND_ERROR_LOG_INTERVAL_SECONDS:
@@ -82,16 +79,19 @@ def _log_background_exception(task_name: str, exc: Exception) -> None:
 
 
 def _ist_timestamp() -> str:
+    """Return the program timestamp string in the existing IST format."""
     return "%s +5:30" % (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
 
 def _is_last_week_expiry(expiry_date: dt_date) -> bool:
+    """Return True when the expiry belongs to the last week of its month."""
     return (expiry_date + timedelta(days=7)).month != expiry_date.month
 
 
 def _transform_symbol(symbol_value: str) -> str:
+    """Convert a 5paisa option symbol into the Kotak Neo trading symbol format."""
     parts = symbol_value.split()
     symbol = parts[0]
     day = parts[1]
@@ -135,12 +135,13 @@ class ProgramBackground:
         df_pd: DataFrame,
         additional_client: Any,
     ) -> None:
+        """Initialise per-client paths, broker helpers, and background dependencies."""
         self.client = client
-        self.additional_client = additional_client  # trip wire
+        self.additional_client = additional_client
         self.client_key = client_key.lower()
         log.info("Initialising background tasks for account=%s", self.client_key)
         self.quotes = Quotes(client, INDEX_DETAILS_FNO)
-        if _is_neo_client(self.client):  # trip wire
+        if _is_neo_client(self.client):
             self.client_profile = ClientProfile(self.client)
         else:
             self.client_profile = ClientProfile(self.additional_client)
@@ -185,20 +186,14 @@ class ProgramBackground:
                 stores them in a dictionary, and dumps the data to a file.
                 The process repeats every 1 second until stopped.
 
-                Note: This function assumes the existence of certain helper functions
-                such as `#disable_loguru_to_devnull()`, `#restore_loguru()`,
-                `create_empty_file_if_not_exists()`, and `dump_data_to_file()`.
-
                 Returns:
                     None
                 """
-                # log.info("Storing client open positions to file...")
                 while True:
                     try:
                         time.sleep(2)
                         disable_loguru_to_devnull()
                         open_positions = self.client_orders.get_open_positions()
-                        # restore_loguru()
                         open_positions_file_path = (
                             self.client_dir_path / "open_positions.json"
                         )
@@ -245,15 +240,11 @@ class ProgramBackground:
                 Returns:
                     None
                 """
-                # log.info("Storing index quotes to file...")
                 while True:
                     try:
                         time.sleep(2)
                         disable_loguru_to_devnull()
-                        # log.info("Getting quote for index: %s", index_key)
                         index_quote = self.quotes.get_ltp_index(index_key)
-                        # log.info("Index quote for %s: %s", index_key, index_quote)
-                        # restore_loguru()
                         index_quote_file_path = (
                             self.client_dir_path / f"{index_key}.json"
                         )
@@ -269,10 +260,8 @@ class ProgramBackground:
                             "current_week_expiry_date": current_week_expiry_date,
                             "timestamp": _ist_timestamp(),
                         }
-                        # log.info("Dumping data to file: %s.json", index_key)
                         if data_to_dump != {}:
                             dump_data_to_file(data_to_dump, index_quote_file_path)
-                        # log.info("Data dumped to file: %s.json", index_key)
                     except Exception as e:
                         _log_background_exception(
                             f"store_index_quotes_to_file:{index_key}", e
@@ -305,14 +294,9 @@ class ProgramBackground:
                 stores it along with the current timestamp in a dictionary, and dumps
                 the data to a file. The process repeats every 1 second until stopped.
 
-                Note: This function assumes the existence of certain helper functions
-                such as `#disable_loguru_to_devnull()`, `#restore_loguru()`,
-                `create_empty_file_if_not_exists()`, and `dump_data_to_file()`.
-
                 Returns:
                     None
                 """
-                # log.info("Storing client margin to file...")
                 while True:
                     try:
                         time.sleep(2)
@@ -320,8 +304,6 @@ class ProgramBackground:
                         client_margin = (
                             self.client_profile.get_client_available_margin()
                         )
-                        # log.info("Client margin: %s", client_margin)
-                        # restore_loguru()
                         margin_file_path = self.client_margin_file_path
                         create_empty_file_if_not_exists(margin_file_path)
                         data_to_dump = {
@@ -330,9 +312,7 @@ class ProgramBackground:
                             "timestamp": _ist_timestamp(),
                         }
                         if data_to_dump != {}:
-                            # log.info("Dumping data to file: %s", margin_file_path)
                             dump_data_to_file(data_to_dump, margin_file_path)
-                            # log.info("Data dumped to file: %s", margin_file_path)
                     except Exception as e:
                         _log_background_exception("store_client_margin_to_file", e)
                         time.sleep(2)
@@ -362,21 +342,14 @@ class ProgramBackground:
                 stores it along with the current timestamp in a dictionary, and dumps
                 the data to a file. The process repeats every 1 second until stopped.
 
-                Note: This function assumes the existence of certain helper functions
-                such as `#disable_loguru_to_devnull()`, `#restore_loguru()`,
-                `create_empty_file_if_not_exists()`, and `dump_data_to_file()`.
-
                 Returns:
                     None
                 """
-                # log.info("Storing client margin to file...")
                 while True:
                     try:
                         time.sleep(2)
                         disable_loguru_to_devnull()
                         count = self.client_profile.get_completed_buy_order_count()
-                        # log.info("Completed buy order count: %s", count)
-                        # restore_loguru()
                         completed_buy_order_count_file_path = (
                             self.completed_buy_order_count_file_path
                         )
@@ -387,18 +360,10 @@ class ProgramBackground:
                             "completed_buy_order_count": count,
                             "timestamp": _ist_timestamp(),
                         }
-                        # log.info(
-                        #     "Dumping data to file: %s",
-                        #     completed_buy_order_count_file_path,
-                        # )
                         if data_to_dump != {}:
                             dump_data_to_file(
                                 data_to_dump, completed_buy_order_count_file_path
                             )
-                        # log.info(
-                        #     "Data dumped to file: %s",
-                        #     completed_buy_order_count_file_path,
-                        # )
                     except Exception as e:
                         _log_background_exception(
                             "store_completed_buy_order_count_to_file", e
@@ -425,6 +390,7 @@ class ProgramBackground:
             def create_option_details(
                 index_key: str, expiry: str, strike_price_list: list[str]
             ) -> list[dict[str, Any]]:
+                """Build 5paisa market-feed payload entries for an index expiry."""
                 option_details_map = []
                 log.debug("Creating option details for index=%s", index_key)
                 for strike_price in strike_price_list:
@@ -453,6 +419,7 @@ class ProgramBackground:
                 option_details: dict[str, Any],
                 client_margin: float,
             ) -> list[dict[str, Any]]:
+                """Combine quote rows, margin, scrip codes, and Kotak order payloads."""
                 log.debug(
                     "Creating options map. client_margin=%s requested=%d returned=%d",
                     client_margin,
@@ -463,17 +430,8 @@ class ProgramBackground:
                 for detail_map, detail in zip(
                     option_details_map, option_details["Data"]
                 ):
-                    # log.info("Detail map: %s", detail_map)
-                    # log.info("Detail: %s", detail)
                     index_base = detail_map["Symbol"].split()[0]
-                    # log.info("Index base: %s", index_base)
                     if "LastRate" in detail and detail["LastRate"] > 0:
-                        # Calculate how many units can be bought with the available margin
-                        # log.info(
-                        #     "Last rate found for %s: %s",
-                        #     detail_map["Symbol"],
-                        #     detail["LastRate"],
-                        # )
                         index_config: Mapping[str, Any] = INDEX_DETAILS_FNO.get(
                             index_base, {}
                         )
@@ -481,8 +439,6 @@ class ProgramBackground:
                         max_lot_size = cast(int, index_config.get("max_lot_size", 1))
                         last_rate = cast(float, detail["LastRate"])
                         now = datetime.now().time()
-                        # if now > dt_time(14, 55) or now < dt_time(7, 0):
-                        #     return 10000.0
                         if (
                             last_rate == 0
                             or last_rate is None
@@ -491,38 +447,22 @@ class ProgramBackground:
                             or (
                                 (last_rate < 5)
                                 and (now > dt_time(9, 14) and now < dt_time(15, 55))
-                            )  # or (
-                            # (last_rate < 10)
-                            # and (now > dt_time(9, 14) and now < dt_time(14, 55))
-                            # )
+                            )
                         ):
-                            last_rate = 100000000000000  # effectively infinity
-                        # log.info("Last rate: %s, for index %s", last_rate, index_base)
+                            last_rate = 100000000000000
                         units_can_buy = floor(client_margin / last_rate)
 
-                        # Calculate how many full lots can be bought
-                        # log.info(
-                        #     "Units can buy: %s, for index %s", units_can_buy, index_base
-                        # )
-                        # log.info(
-                        #     "Lot quantity: %s, for index %s", lot_quantity, index_base
-                        # )
                         full_lots = units_can_buy // lot_quantity
 
-                        # Calculate the quantity to purchase as full lots times the lot size
                         qty_to_purchase = full_lots * lot_quantity
 
-                        # Fetch the scrip code from the CSV file
                         to_match = detail_map["Symbol"]
-                        # log.info("To match: %s", to_match)
                         if "midcpnifty" in to_match.lower():
                             to_match = to_match.replace("MIDCPNifty", "MIDCPNIFTY")
                         scrip_code = int(
                             fetch_scrip_code_from_csv(self.df_pd, to_match.upper())
                         )
-                        # log.info("For match %s Scrip code: %s", to_match, scrip_code)
                         max_qty_per_order = (lot_quantity * max_lot_size) // 10
-                        # log.info("Max qty per order: %s", max_qty_per_order)
 
                         if index_base in ["BANKEX"]:
                             max_qty_per_order = 9000
@@ -534,10 +474,8 @@ class ProgramBackground:
                         ) // max_qty_per_order
 
                         transformed_symbol = _transform_symbol(to_match)
-                        # Initialize a list to store the bulk orders
                         bulk_order_list: list[list[dict[str, Any]]] = []
                         bulk_order: list[dict[str, Any]] = []
-                        # Create bulk order dicts and distribute them into lists
                         qty_to_purchase_stat = qty_to_purchase
                         while qty_to_purchase > 0:
                             now = datetime.now().time()
@@ -551,17 +489,12 @@ class ProgramBackground:
                                     ),
                                     "product": "MIS",
                                     "price": (
-                                        # change here
                                         str(round(detail["LastRate"] * 1.05, 0))
                                         if now > dt_time(9, 30)
                                         and now < dt_time(15, 55)
                                         else str(round(detail["LastRate"] * 1.05, 0))
                                     ),
                                     "order_type": (
-                                        # change here
-                                        # "L"
-                                        # if index_base in ("MIDCPNifty", "BANKEX")
-                                        # else "MKT"
                                         "L"
                                         if now > dt_time(9, 30)
                                         and now < dt_time(15, 55)
@@ -580,15 +513,11 @@ class ProgramBackground:
                                 len(bulk_order) == max_orders_per_list
                                 or qty_to_purchase <= max_qty_per_order
                             ):
-                                # Once the list reaches its max size or remaining qty is less than max per order, add to bulk_order_list
                                 bulk_order_list.append(bulk_order)
-                                bulk_order = []  # Reset the bulk order list for the next batch
+                                bulk_order = []
 
-                            qty_to_purchase -= (
-                                order_qty  # Decrease the quantity left to purchase
-                            )
+                            qty_to_purchase -= order_qty
 
-                        # Add the remaining orders if any
                         if bulk_order:
                             bulk_order_list.append(bulk_order)
 
@@ -609,11 +538,10 @@ class ProgramBackground:
                                 "timestamp": _ist_timestamp(),
                             }
                         )
-                # log.info("Options map: %s", options_map)
                 return options_map
 
             def store_index_option_quotes_to_file_t(index_key: str) -> None:
-                # log.info("Storing index option quotes to file for index: %s", index_key)
+                """Refresh one index option-chain JSON file until the process exits."""
                 while True:
                     try:
                         time.sleep(1)
@@ -622,7 +550,6 @@ class ProgramBackground:
                             index_quote_file
                         )
                         if file_contents_index_quote is None:
-                            # log.info("Index quote file not found: %s", index_quote_file)
                             continue
 
                         index_quote = file_contents_index_quote["quote"]
@@ -633,47 +560,29 @@ class ProgramBackground:
                             )
                         )
                         if not option_strike_price_list:
-                            # log.info("No option strike prices found for %s.", index_key)
                             continue
 
                         file_contents_client_margin = read_data_from_file(
                             self.client_margin_file_path
                         )
                         if file_contents_client_margin is None:
-                            # log.info(
-                            #     "Client margin file not found: %s",
-                            #     self.client_margin_file_path,
-                            # )
                             continue
 
                         client_margin = file_contents_client_margin["available_margin"]
                         option_details_map = create_option_details(
                             index_key, expiry, option_strike_price_list
                         )
-                        # log.info(
-                        #     "For index %s Option details map: %s",
-                        #     index_key,
-                        #     option_details_map,
-                        # )
-                        # disable_loguru_to_devnull()
                         option_details = self.quotes.get_ltp_for_opt_strike_price(
                             optional_list=option_details_map
                         )
-                        # log.info(
-                        #     "Option details quotes for index %s: %s",
-                        #     index_key,
-                        #     option_details,
-                        # )
                         options_map = create_options_map(
                             option_details_map, option_details, client_margin
                         )
-                        # restore_loguru()
 
                         option_details_file_path = (
                             self.client_dir_path / f"{index_key}_options.json"
                         )
                         create_empty_file_if_not_exists(option_details_file_path)
-                        # log.info("Dumping data to file: %s", option_details_file_path)
                         if options_map != []:
                             dump_data_to_file(options_map, option_details_file_path)
                     except Exception as e:
@@ -698,6 +607,7 @@ class ProgramBackground:
         try:
 
             def store_symbol_price_lookup_to_file_t() -> None:
+                """Merge generated option files into a trading-symbol price lookup."""
                 lookup_file_path = self.client_dir_path / "symbol_price_lookup.json"
 
                 create_empty_file_if_not_exists(lookup_file_path)
@@ -775,7 +685,7 @@ class ProgramBackground:
             Exception: If an error occurs while starting the background tasks.
         """
         try:
-            if _is_neo_client(self.client):  # trip wire
+            if _is_neo_client(self.client):
                 self.store_client_margin_to_file()
                 log.info(
                     "Started Neo background task set for account=%s", self.client_key

@@ -1,8 +1,3 @@
-# pylint: disable=wrong-import-position
-# pylint: disable=too-many-nested-blocks
-# pylint: disable=broad-exception-caught
-# pylint: disable=line-too-long
-# pylint: disable=consider-using-f-string
 # ruff: noqa: E402
 
 """
@@ -24,10 +19,12 @@ log = setup_logging("program_client_profile")
 
 
 def _is_neo_client(client: Any) -> bool:
+    """Return True when the SDK object looks like a Kotak Neo client."""
     return "NeoWebSocket" in dir(client)
 
 
 def _margin_after_buffer(margin: float) -> float:
+    """Apply the safety buffer while preserving the legacy minimum margin."""
     available_margin = margin - BUFFER_MARGIN
     if available_margin <= 0:
         return 1
@@ -40,6 +37,7 @@ class ClientProfile:
     """
 
     def __init__(self, client: Any) -> None:
+        """Store the broker SDK client used by the profile reader."""
         self.client = client
 
     def get_client_available_margin(self) -> float:
@@ -50,14 +48,9 @@ class ClientProfile:
             float: The available margin for the client.
         """
 
-        # Check if time is after 14:55 or before 09:00
-        # if (now > dt_time(14, 55) and now < dt_time(15, 31)) and is_tuesday_or_thursday:
-        #     return 10000.0
-
         if _is_neo_client(self.client):
             margin = float(self.client.limits()["Net"])
             return _margin_after_buffer(margin)
-            # return 5000
 
         margin = float(self.client.margin()[0]["NetAvailableMargin"])
         return _margin_after_buffer(margin)
